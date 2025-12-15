@@ -231,7 +231,7 @@ function initializeUI() {
 }
 
 // Загрузка модели TensorFlow.js
-/*async function loadModel() {
+async function loadModel() {
     try {
         showStatus('Loading the model...', 'info');
         
@@ -272,9 +272,9 @@ function initializeUI() {
         showStatus('Model loading error', 'error');
         createDemoModel();
     }
-}*/
+}
 
-async function loadModel() {
+/*async function loadModel() {
     try {
         showStatus('Loading model...', 'info');
         
@@ -305,7 +305,7 @@ async function loadModel() {
         // Пробуем другой путь
         await tryAlternativeLoad();
     }
-}
+}*/
 
 // Создание демо-модели для тестирования
 function createDemoModel() {
