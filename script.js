@@ -919,6 +919,25 @@ function initializeAudioVisualization() {
     console.log('✅ Audio visualization initialized');
 }
 
+// Проверка доступности файлов
+async function checkModelFiles() {
+    try {
+        const modelJson = await fetch('./model/model.json');
+        if (!modelJson.ok) throw new Error('model.json not found');
+        
+        const weightsManifest = await modelJson.json();
+        for (const path of weightsManifest.weightsManifest[0].paths) {
+            const response = await fetch(`./model/${path}`);
+            if (!response.ok) throw new Error(`Weight file not found: ${path}`);
+            console.log(`✅ Found weight file: ${path}`);
+        }
+        return true;
+    } catch (error) {
+        console.error('❌ Model file check failed:', error);
+        return false;
+    }
+}
+
 // Визуализация аудио
 function visualizeAudio(audioBuffer) {
     if (!waveformCanvas) return;
@@ -1072,3 +1091,5 @@ console.log(`
 Using CRNN model with Mel-spectrograms
 N_MELS: ${CONFIG.N_MELS}, MAX_LENGTH: ${CONFIG.MAX_LENGTH}
 `);
+
+
