@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Emotion Detector - Распознавание эмоций по голосу</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-vis"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><i class="fas fa-microphone-alt"></i> Voice Emotion Detector</h1>
+            <p class="subtitle">Определение эмоционального состояния сотрудников по голосу</p>
+        </header>
+
+        <div class="dashboard">
+            <div class="card main-controls">
+                <h2><i class="fas fa-sliders-h"></i> Управление записью</h2>
+                <div class="controls">
+                    <button id="recordBtn" class="btn btn-primary">
+                        <i class="fas fa-microphone"></i> Начать запись
+                    </button>
+                    <button id="stopBtn" class="btn btn-danger" disabled>
+                        <i class="fas fa-stop"></i> Остановить
+                    </button>
+                    <button id="playBtn" class="btn btn-secondary" disabled>
+                        <i class="fas fa-play"></i> Воспроизвести
+                    </button>
+                    <div class="upload-container">
+                        <input type="file" id="fileUpload" accept="audio/*" class="file-input">
+                        <label for="fileUpload" class="btn btn-secondary">
+                            <i class="fas fa-upload"></i> Загрузить аудио
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="recording-status">
+                    <div id="status" class="status">Готов к записи</div>
+                    <div class="timer">
+                        <i class="fas fa-clock"></i>
+                        <span id="timer">00:00</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card audio-visualization">
+                <h2><i class="fas fa-wave-square"></i> Визуализация аудио</h2>
+                <div class="waveform-container">
+                    <canvas id="waveform"></canvas>
+                </div>
+                <div class="audio-info">
+                    <p><i class="fas fa-info-circle"></i> <strong>Статус:</strong> <span id="audioStatus">Нет аудио</span></p>
+                    <p><i class="fas fa-volume-up"></i> <strong>Громкость:</strong> <span id="volumeLevel">--</span></p>
+                    <p><i class="fas fa-clock"></i> <strong>Длительность:</strong> <span id="duration">--</span> сек</p>
+                </div>
+            </div>
+
+            <div class="card emotion-result">
+                <h2><i class="fas fa-brain"></i> Результат анализа</h2>
+                <div class="stress-gauge">
+                    <div class="gauge-container">
+                        <div class="gauge">
+                            <div class="gauge-fill" id="gaugeFill"></div>
+                            <div class="gauge-center"></div>
+                        </div>
+                        <div class="gauge-labels">
+                            <span class="label-low">Низкий</span>
+                            <span class="label-medium">Средний</span>
+                            <span class="label-high">Высокий</span>
+                        </div>
+                        <div class="stress-level">
+                            <h3 id="stressText">Уровень стресса: --</h3>
+                            <div class="emoji" id="stressEmoji">😐</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="emotion-probabilities">
+                    <h3><i class="fas fa-chart-bar"></i> Распределение эмоций</h3>
+                    <div class="bars-container" id="emotionBars">
+                        <!-- Будет заполнено скриптом -->
+                    </div>
+                </div>
+
+                <div class="primary-emotion">
+                    <h3><i class="fas fa-heart"></i> Основная эмоция</h3>
+                    <div class="emotion-display">
+                        <div class="emotion-icon" id="primaryEmotionIcon">😐</div>
+                        <div class="emotion-text">
+                            <h2 id="primaryEmotion">Нейтрально</h2>
+                            <p id="confidence">Вероятность: --%</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card wellness-tips">
+                <h2><i class="fas fa-spa"></i> Рекомендации</h2>
+                <div class="tips-container">
+                    <div class="tip" id="stressTip">
+                        <h3><i class="fas fa-lightbulb"></i> Советы по управлению стрессом</h3>
+                        <p>Загрузите или запишите аудио для получения персонализированных рекомендаций</p>
+                    </div>
+                    <div class="tip" id="actionTip">
+                        <h3><i class="fas fa-tasks"></i> Рекомендуемые действия</h3>
+                        <ul id="actionList">
+                            <li>Запишите голос для анализа</li>
+                        </ul>
+                    </div>
+                    <div class="tip" id="supervisorTip">
+                        <h3><i class="fas fa-user-tie"></i> Для руководителя</h3>
+                        <p>Анализ эмоционального состояния команды может помочь в управлении нагрузкой</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card model-info">
+            <h2><i class="fas fa-cogs"></i> Информация о модели</h2>
+            <div class="info-grid">
+                <div class="info-item">
+                    <i class="fas fa-project-diagram"></i>
+                    <h4>Архитектура</h4>
+                    <p>LSTM + MFCC features</p>
+                </div>
+                <div class="info-item">
+                    <i class="fas fa-bullseye"></i>
+                    <h4>Точность</h4>
+                    <p id="modelAccuracy">Загрузка...</p>
+                </div>
+                <div class="info-item">
+                    <i class="fas fa-microphone"></i>
+                    <h4>Частота дискретизации</h4>
+                    <p>22050 Гц</p>
+                </div>
+                <div class="info-item">
+                    <i class="fas fa-clock"></i>
+                    <h4>Макс. длительность</h4>
+                    <p>10 секунд</p>
+                </div>
+            </div>
+            <div class="progress-container">
+                <div class="progress-label">
+                    <span>Загрузка модели:</span>
+                    <span id="modelProgress">0%</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="modelProgressFill"></div>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p>Voice Emotion Detection System v1.0 | Для оценки эмоционального состояния сотрудников</p>
+            <p class="disclaimer">
+                <i class="fas fa-exclamation-triangle"></i> 
+                Внимание: Данная система является вспомогательным инструментом и не заменяет профессиональную психологическую оценку.
+            </p>
+        </footer>
+    </div>
+
+    <script src="lib/mfcc.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
