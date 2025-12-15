@@ -231,7 +231,7 @@ function initializeUI() {
 }
 
 // Загрузка модели TensorFlow.js
-async function loadModel() {
+/*async function loadModel() {
     try {
         showStatus('Loading the model...', 'info');
         
@@ -271,6 +271,39 @@ async function loadModel() {
         console.error('❌ Model loading error:', error);
         showStatus('Model loading error', 'error');
         createDemoModel();
+    }
+}*/
+
+async function loadModel() {
+    try {
+        showStatus('Loading model...', 'info');
+        
+        // Пробуем загрузить как graph model
+        model = await tf.loadGraphModel('./model/model.json', {
+            onProgress: (progress) => {
+                const percent = Math.round(progress * 100);
+                if (modelProgress) {
+                    modelProgress.textContent = `${percent}%`;
+                    modelProgressFill.style.width = `${percent}%`;
+                }
+            }
+        });
+        
+        isModelLoaded = true;
+        
+        console.log('✅ Graph model loaded successfully!');
+        console.log('📐 Model signature:', model.signature);
+        
+        showStatus('Model loaded successfully', 'success');
+        if (modelAccuracy) {
+            modelAccuracy.textContent = '71% (CRNN)';
+        }
+        
+    } catch (error) {
+        console.error('❌ Graph model loading error:', error);
+        
+        // Пробуем другой путь
+        await tryAlternativeLoad();
     }
 }
 
