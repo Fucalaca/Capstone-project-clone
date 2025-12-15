@@ -1,6 +1,7 @@
 // УДАЛИТЕ старый CONFIG и весь старый код
 // ВСТАВЬТЕ этот полностью обновленный код:
 
+
 // Конфигурация (ТОЛЬКО ОДИН РАЗ!)
 const CONFIG = {
     SAMPLE_RATE: 22050,
@@ -35,6 +36,148 @@ const CONFIG = {
         'surprise': '😲'
     }
 };
+
+// Регистрация custom layer EmotionCRNN
+class EmotionCRNN extends tf.layers.Layer {
+    constructor(config) {
+        super(config);
+        
+        // Параметры из model.json
+        this.input_size = config.input_size || 256;
+        this.hidden_size = config.hidden_size || 256;
+        this.num_layers = config.num_layers || 2;
+        this.num_classes = config.num_classes || 7;
+        this.dropout = config.dropout || 0.3;
+        this.cnn_channels = config.cnn_channels || 64;
+        
+        // CNN часть
+        this.cnn = tf.sequential();
+        
+        // Conv1D + BatchNorm + ReLU + MaxPool
+        this.cnn.add(tf.layers.conv1d({
+            filters: this.cnn_channels,
+            kernelSize: 3,
+            padding: 'same',
+            inputShape: [null, this.input_size]  // [time, mel_bands]
+        }));
+        this.cnn.add(tf.layers.batchNormalization());
+        this.cnn.add(tf.layers.activation({activation: 'relu'}));
+        this.cnn.add(tf.layers.maxPooling1d({poolSize: 2, strides: 2}));
+        this.cnn.add(tf.layers.dropout({rate: this.dropout / 2}));
+        
+        // Вторая свертка
+        this.cnn.add(tf.layers.conv1d({
+            filters: this.cnn_channels * 2,
+            kernelSize: 3,
+            padding: 'same'
+        }));
+        this.cnn.add(tf.layers.batchNormalization());
+        this.cnn.add(tf.layers.activation({activation: 'relu'}));
+        this.cnn.add(tf.layers.maxPooling1d({poolSize: 2, strides: 2}));
+        this.cnn.add(tf.layers.dropout({rate: this.dropout / 2}));
+        
+        // Третья свертка
+        this.cnn.add(tf.layers.conv1d({
+            filters: this.cnn_channels * 4,
+            kernelSize: 3,
+            padding: 'same'
+        }));
+        this.cnn.add(tf.layers.batchNormalization());
+        this.cnn.add(tf.layers.activation({activation: 'relu'}));
+        this.cnn.add(tf.layers.maxPooling1d({poolSize: 2, strides: 2}));
+        this.cnn.add(tf.layers.dropout({rate: this.dropout}));
+        
+        // AdaptiveAvgPool1d (эмулируем через GlobalAveragePooling)
+        this.cnn.add(tf.layers.globalAveragePooling1d());
+        
+        // LSTM часть
+        this.lstm = tf.layers.bidirectional({
+            layer: tf.layers.lstm({
+                units: this.hidden_size,
+                returnSequences: this.num_layers > 1,
+                dropout: this.dropout
+            }),
+            mergeMode: 'concat'
+        });
+        
+        // Второй LSTM слой если нужно
+        if (this.num_layers > 1) {
+            this.lstm2 = tf.layers.bidirectional({
+                layer: tf.layers.lstm({
+                    units: this.hidden_size,
+                    returnSequences: false,
+                    dropout: this.dropout
+                }),
+                mergeMode: 'concat'
+            });
+        }
+        
+        // Механизм внимания
+        this.attention_dense1 = tf.layers.dense({
+            units: this.hidden_size,
+            activation: 'tanh'
+        });
+        this.attention_dense2 = tf.layers.dense({
+            units: 1
+        });
+        
+        // Полносвязные слои
+        this.fc1 = tf.layers.dense({
+            units: this.hidden_size,
+            activation: 'relu'
+        });
+        this.dropout1 = tf.layers.dropout({rate: this.dropout});
+        this.fc2 = tf.layers.dense({
+            units: this.num_classes
+        });
+    }
+    
+    call(inputs, kwargs) {
+        return tf.tidy(() => {
+            // 1. CNN часть
+            let x = inputs;
+            
+            // Переводим из [batch, mel, time] в [batch, time, mel]
+            x = tf.transpose(x, [0, 2, 1]);  // (batch, time, mel)
+            
+            // Применяем CNN
+            x = this.cnn.apply(x);
+            
+            // После GlobalAveragePooling1d: (batch, features)
+            // Нужно добавить временную ось для LSTM: (batch, 1, features)
+            x = tf.expandDims(x, 1);
+            
+            // 2. LSTM часть
+            x = this.lstm.apply(x);
+            
+            if (this.lstm2) {
+                x = this.lstm2.apply(x);
+            }
+            
+            // 3. Внимание
+            const attention = this.attention_dense2.apply(
+                this.attention_dense1.apply(x)
+            );
+            const attentionWeights = tf.softmax(attention, 1);
+            const weighted = tf.sum(tf.mul(x, attentionWeights), 1);
+            
+            // 4. Полносвязные слои
+            x = this.fc1.apply(weighted);
+            x = this.dropout1.apply(x);
+            x = this.fc2.apply(x);
+            
+            return x;
+        });
+    }
+    
+    static get className() {
+        return 'EmotionCRNN';
+    }
+}
+
+// Регистрируем custom layer
+tf.serialization.registerClass(EmotionCRNN);
+console.log('✅ Custom layer EmotionCRNN registered');
 
 // Глобальные переменные
 let model = null;
