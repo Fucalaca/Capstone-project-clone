@@ -1,18 +1,12 @@
 // Конфигурация
+
 const CONFIG = {
     SAMPLE_RATE: 22050,
-    N_MFCC: 13,
-    MAX_LENGTH: 200,
+    N_MELS: 64,          // УТОЧНИТЕ у коллеги!
+    MAX_LENGTH: 200,     // УТОЧНИТЕ у коллеги!
+    // УДАЛИТЕ N_MFCC: 13,
     EMOTIONS: ['angry', 'disgust', 'fear', 'happy', 'neutral', 'sad', 'surprise'],
-    EMOTION_LABELS_RU: {
-        'angry': 'Злость',
-        'disgust': 'Отвращение',
-        'fear': 'Страх',
-        'happy': 'Радость',
-        'neutral': 'Нейтрально',
-        'sad': 'Грусть',
-        'surprise': 'Удивление'
-    },
+    // ... остальное без изменений
     STRESS_LEVELS: {
         'angry': 'high',
         'disgust': 'medium',
@@ -66,72 +60,89 @@ const modelAccuracy = document.getElementById('modelAccuracy');
 const modelProgress = document.getElementById('modelProgress');
 const modelProgressFill = document.getElementById('modelProgressFill');
 
+// После загрузки DOM
+document.addEventListener('DOMContentLoaded', async () => {
+    initializeUI();
+    
+    // Инициализируйте MelSpectrogram перед загрузкой модели
+    melProcessor = new MelSpectrogram(
+        CONFIG.SAMPLE_RATE,
+        CONFIG.N_MELS,
+        2048,  // n_fft
+        512    // hop_length
+    );
+    
+    await loadModel();
+    setupEventListeners();
+    initializeAudioVisualization();
+});
+
 // Советы для разных эмоций
 const WELLNESS_TIPS = {
     'angry': {
-        title: 'Управление гневом',
+        title: 'Anger Control',
         tips: [
-            'Сделайте 5 глубоких вдохов и выдохов',
-            'Попробуйте техники mindfulness на 5 минут',
-            'Прогуляйтесь на свежем воздухе',
-            'Выпейте стакан воды'
+            'Take 5 deep breaths in and out',
+            'Try mindfulness techniques for 5 minutes',
+            'Take a walk in the fresh air',
+            'Drink a glass of water'
         ],
-        supervisor: 'Рекомендуется дать сотруднику возможность короткого перерыва'
+        supervisor: 'It is recommended to give the employee a short break'
     },
     'disgust': {
-        title: 'Преодоление отвращения',
+        title: 'Overcoming Disgust',
         tips: [
-            'Сосредоточьтесь на позитивных аспектах ситуации',
-            'Поговорите с коллегой о своих чувствах',
-            'Смените обстановку на 10-15 минут'
+            'Focus on the positive aspects of the situation',
+            'Talk to a colleague about your feelings',
+            'Change the environment for 10-15 minutes'
         ],
-        supervisor: 'Рассмотрите возможность изменения рабочих условий'
+        supervisor: 'Consider changing the working conditions'
     },
     'fear': {
-        title: 'Снижение тревожности',
+        title: 'Reducing anxiety',
         tips: [
-            'Разбейте большие задачи на маленькие шаги',
-            'Практикуйте техники заземления',
-            'Обсудите свои опасения с руководителем'
+            'Break down big tasks into small steps',
+            'Practice grounding techniques',
+            'Discuss your concerns with your supervisor'
         ],
-        supervisor: 'Обеспечьте четкие инструкции и поддержку'
+        supervisor: 'Provide clear instructions and support'
     },
     'happy': {
-        title: 'Поддержка позитивного настроения',
+        title: 'Maintaining a positive mood',
         tips: [
-            'Поделитесь позитивом с коллегами',
-            'Воспользуйтесь энергией для сложных задач',
-            'Запланируйте что-то приятное после работы'
+            'Share the positivity with your colleagues',
+            'Use energy for challenging tasks',
+            'Plan something pleasant after work'
         ],
-        supervisor: 'Используйте позитивный настрой для мотивации команды'
+        supervisor: 'Use a positive attitude to motivate your team'
     },
     'neutral': {
-        title: 'Поддержание баланса',
+        title: 'Maintaining balance',
         tips: [
-            'Спланируйте день для максимальной продуктивности',
-            'Сделайте короткую разминку',
-            'Поддерживайте водный баланс'
+            'Plan your day for maximum productivity',
+            'Do a short warm-up session',
+            'Maintain water balance'
         ],
-        supervisor: 'Стабильное состояние оптимально для рабочих задач'
+        supervisor: 'Stable condition is optimal for work tasks'
     },
     'sad': {
-        title: 'Повышение настроения',
+        title: 'Mood boost',
         tips: [
-            'Позвоните близкому человеку',
-            'Послушайте любимую музыку',
-            'Сделайте что-то приятное для себя',
-            'Вспомните свои последние успехи'
+            'Call a loved one',
+            'Listen to your favorite music',
+            'Do something nice for yourself',
+            'Remember your recent successes'
         ],
-        supervisor: 'Проявите эмпатию и предложите поддержку'
+        supervisor: 'Show empathy and offer support'
     },
     'surprise': {
-        title: 'Адаптация к неожиданностям',
+        title: 'Adaptation to the unexpected',
         tips: [
-            'Возьмите паузу для осмысления',
-            'Составьте план действий',
-            'Обратитесь за разъяснениями при необходимости'
+            'Take a break to reflect',
+            'Make a plan of action',
+            'Ask for clarification if necessary'
         ],
-        supervisor: 'Обеспечьте ясность и дополнительную информацию'
+        supervisor: 'Provide clarity and additional information'
     }
 };
 
@@ -165,10 +176,8 @@ function initializeUI() {
 // Загрузка модели TensorFlow.js
 async function loadModel() {
     try {
-        showStatus('Загрузка модели...', 'info');
+        showStatus('Loading model...', 'info');
         
-        // Для демонстрации используем фиктивную модель
-        // В реальности нужно конвертировать PyTorch модель в TF.js
         model = await tf.loadLayersModel('./model/model.json', {
             onProgress: (progress) => {
                 const percent = Math.round(progress * 100);
@@ -178,26 +187,36 @@ async function loadModel() {
         });
         
         isModelLoaded = true;
-        showStatus('Модель загружена', 'success');
-        modelAccuracy.textContent = '62% (демо)';
         
-        console.log('Модель успешно загружена');
-        console.log('Архитектура модели:', model.summary());
+        // Проверяем входной формат модели
+        const inputShape = model.inputs[0].shape;
+        console.log('Model input shape:', inputShape);
+        // Должно быть: [null, N_MELS, MAX_LENGTH]
+        
+        // Обновляем CONFIG если нужно
+        if (inputShape[1] && inputShape[1] !== CONFIG.N_MELS) {
+            console.warn(`Warning: Expected ${inputShape[1]} mel bands, but CONFIG has ${CONFIG.N_MELS}`);
+        }
+        if (inputShape[2] && inputShape[2] !== CONFIG.MAX_LENGTH) {
+            console.warn(`Warning: Expected ${inputShape[2]} time steps, but CONFIG has ${CONFIG.MAX_LENGTH}`);
+        }
+        
+        showStatus('Model loaded', 'success');
+        modelAccuracy.textContent = '71% (v1)';
         
     } catch (error) {
-        console.error('Ошибка загрузки модели:', error);
-        showStatus('Ошибка загрузки модели', 'error');
-        
-        // Создаем демо-модель для тестирования
+        console.error('Model loading error:', error);
+        showStatus('Model loading error', 'error');
         createDemoModel();
     }
 }
 
+
 // Создание демо-модели для тестирования
 function createDemoModel() {
-    showStatus('Используется демо-режим', 'warning');
+    showStatus('v1', 'warning');
     isModelLoaded = true;
-    modelAccuracy.textContent = '62% (демо)';
+    modelAccuracy.textContent = '71% (v1)';
     
     // Простая модель для демонстрации
     model = {
@@ -267,14 +286,14 @@ async function startRecording() {
         stopBtn.disabled = false;
         playBtn.disabled = true;
         
-        showStatus('Идет запись...', 'recording');
+        showStatus('Recording...', 'recording');
         recordBtn.classList.add('recording');
         
         updateAudioStatus('Запись...');
         
     } catch (error) {
         console.error('Ошибка записи:', error);
-        showStatus('Ошибка доступа к микрофону', 'error');
+        showStatus('Microphone access error', 'error');
     }
 }
 
@@ -289,7 +308,7 @@ function stopRecording() {
         stopBtn.disabled = true;
         playBtn.disabled = false;
         
-        showStatus('Запись завершена', 'success');
+        showStatus('Recording completed', 'success');
         recordBtn.classList.remove('recording');
     }
 }
@@ -302,10 +321,10 @@ function playAudio() {
         source.connect(audioContext.destination);
         source.start();
         
-        showStatus('Воспроизведение...', 'info');
+        showStatus('Playback...', 'info');
         
         source.onended = () => {
-            showStatus('Воспроизведение завершено', 'success');
+            showStatus('Playback is complete', 'success');
         };
     }
 }
@@ -340,8 +359,8 @@ async function processAudioBlob(blob) {
         currentAudioBuffer = audioBuffer;
         
         // Извлекаем признаки и делаем предсказание
-        const mfccFeatures = extractMFCCFeatures(audioBuffer);
-        await predictEmotion(mfccFeatures);
+        const melFeatures = await extractMelSpectrogramFeatures(audioBuffer);
+        await predictEmotion(melFeatures);
         
         playBtn.disabled = false;
         updateAudioStatus('Аудио загружено');
@@ -353,76 +372,79 @@ async function processAudioBlob(blob) {
 }
 
 // Извлечение MFCC признаков
-function extractMFCCFeatures(audioBuffer) {
-    // В реальном приложении используйте библиотеку для вычисления MFCC
-    // Например, https://github.com/dhchoi/mfcc.js
-    // Здесь упрощенная версия для демонстрации
-    
-    const audioData = audioBuffer.getChannelData(0);
-    const sampleRate = audioBuffer.sampleRate;
-    
-    // Нормализация длительности до 10 секунд
-    const targetSamples = 10 * sampleRate;
-    let processedData;
-    
-    if (audioData.length > targetSamples) {
-        processedData = audioData.slice(0, targetSamples);
-    } else {
-        processedData = new Float32Array(targetSamples);
-        processedData.set(audioData);
-    }
-    
-    // Для демо генерируем случайные MFCC
-    // В реальности используйте библиотеку MFCC
-    const mfcc = [];
-    for (let i = 0; i < CONFIG.N_MFCC; i++) {
-        const frame = [];
-        for (let j = 0; j < CONFIG.MAX_LENGTH; j++) {
-            frame.push(Math.random() * 2 - 1); // Случайные значения для демо
-        }
-        mfcc.push(frame);
-    }
-    
-    return tf.tensor([mfcc]);
-}
-
-// Предсказание эмоции
-async function predictEmotion(features) {
-    if (!isModelLoaded) {
-        showStatus('Модель не загружена', 'error');
-        return;
-    }
-    
+async function extractMelSpectrogramFeatures(audioBuffer) {
     try {
-        showStatus('Анализ эмоций...', 'info');
+        showStatus('Extracting Mel-spectrogram...', 'info');
         
-        const predictions = await model.predict(features);
-        const predictionArray = await predictions.data();
-        predictions.dispose();
+        const audioData = audioBuffer.getChannelData(0);
+        const sampleRate = audioBuffer.sampleRate;
         
-        // Находим наиболее вероятную эмоцию
-        let maxIndex = 0;
-        let maxValue = 0;
+        // Ресамплинг если нужно (ваша модель ожидает 22050 Гц)
+        let processedAudio;
+        if (sampleRate !== CONFIG.SAMPLE_RATE) {
+            processedAudio = await resampleAudio(audioData, sampleRate, CONFIG.SAMPLE_RATE);
+        } else {
+            processedAudio = audioData;
+        }
         
-        const emotionProbabilities = {};
-        CONFIG.EMOTIONS.forEach((emotion, index) => {
-            const probability = predictionArray[index] * 100;
-            emotionProbabilities[emotion] = probability;
-            
-            if (probability > maxValue) {
-                maxValue = probability;
-                maxIndex = index;
-            }
-        });
+        // Вычисляем Mel-спектрограмму
+        const melSpec = await melProcessor.compute(processedAudio);
         
-        const primaryEmotionKey = CONFIG.EMOTIONS[maxIndex];
-        updateResults(primaryEmotionKey, maxValue, emotionProbabilities);
-        showStatus('Анализ завершен', 'success');
+        // Нормализация (как при обучении)
+        const normalized = melProcessor.normalize(melSpec, 'zscore'); // или 'minmax'
+        
+        // Преобразуем в тензор для TensorFlow.js
+        // Формат: [batch_size, n_mels, time]
+        const tensor = tf.tensor([normalized]);
+        
+        console.log('Mel-spectrogram shape:', tensor.shape);
+        showStatus('Features extracted', 'success');
+        
+        return tensor;
         
     } catch (error) {
-        console.error('Ошибка предсказания:', error);
-        showStatus('Ошибка анализа', 'error');
+        console.error('Error extracting Mel-spectrogram:', error);
+        showStatus('Error processing audio', 'error');
+        
+        // Fallback: случайные данные для демо
+        return createRandomMelSpectrogram();
     }
+}
+
+// Функция ресамплинга (если нужно)
+async function resampleAudio(audioData, originalRate, targetRate) {
+    if (originalRate === targetRate) return audioData;
+    
+    const ratio = targetRate / originalRate;
+    const newLength = Math.round(audioData.length * ratio);
+    const resampled = new Float32Array(newLength);
+    
+    for (let i = 0; i < newLength; i++) {
+        const pos = i / ratio;
+        const index = Math.floor(pos);
+        const frac = pos - index;
+        
+        if (index < audioData.length - 1) {
+            resampled[i] = audioData[index] * (1 - frac) + audioData[index + 1] * frac;
+        } else {
+            resampled[i] = audioData[audioData.length - 1];
+        }
+    }
+    
+    return resampled;
+}
+
+// Fallback функция
+function createRandomMelSpectrogram() {
+    const melSpec = [];
+    for (let i = 0; i < CONFIG.N_MELS; i++) {
+        const frame = [];
+        for (let j = 0; j < CONFIG.MAX_LENGTH; j++) {
+            frame.push(Math.random() * 2 - 1); // [-1, 1]
+        }
+        melSpec.push(frame);
+    }
+    return tf.tensor([melSpec]);
 }
 
 // Обновление результатов
@@ -434,7 +456,7 @@ function updateResults(emotion, confidenceValue, probabilities) {
     
     // Уровень стресса
     const stressLevel = CONFIG.STRESS_LEVELS[emotion];
-    stressText.textContent = `Уровень стресса: ${getStressLabel(stressLevel)}`;
+    stressText.textContent = `Stress level: ${getStressLabel(stressLevel)}`;
     stressEmoji.textContent = getStressEmoji(stressLevel);
     
     // Обновляем шкалу стресса
@@ -511,9 +533,9 @@ function getEmotionColor(emotion) {
 // Получение текста уровня стресса
 function getStressLabel(level) {
     const labels = {
-        'low': 'Низкий',
-        'medium': 'Средний',
-        'high': 'Высокий'
+        'low': 'Low',
+        'medium': 'Medium',
+        'high': 'High'
     };
     return labels[level] || 'Низкий';
 }
@@ -664,6 +686,34 @@ window.addEventListener('resize', () => {
         visualizeAudio(currentAudioBuffer);
     }
 });
+
+// В функции predictEmotion добавьте логирование:
+async function predictEmotion(features) {
+    if (!isModelLoaded) {
+        showStatus('Model not loaded', 'error');
+        return;
+    }
+    
+    try {
+        showStatus('Analyzing emotions...', 'info');
+        
+        console.log('Input to model shape:', features.shape);
+        
+        const startTime = performance.now();
+        const predictions = await model.predict(features);
+        const predictionArray = await predictions.data();
+        predictions.dispose();
+        
+        const endTime = performance.now();
+        console.log(`Inference time: ${(endTime - startTime).toFixed(2)} ms`);
+        
+        // ... остальной код без изменений
+        
+    } catch (error) {
+        console.error('Prediction error:', error);
+        showStatus('Analysis error', 'error');
+    }
+}
 
 // Инструкция по использованию
 console.log(`

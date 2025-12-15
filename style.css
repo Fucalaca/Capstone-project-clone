@@ -287,7 +287,7 @@ header h1 {
     flex-direction: column;
     align-items: center;
     gap: 10px;
-    margin-top: 20px;
+    margin-top: -190px;
 }
 
 .emoji {
@@ -312,11 +312,14 @@ header h1 {
     display: flex;
     align-items: center;
     gap: 15px;
+    margin-bottom: 8px; /* Добавь этот отступ */
+    min-height: 30px; /* Минимальная высота для каждой строки */
 }
 
 .emotion-label {
-    min-width: 100px;
+    min-width: 120px;
     font-weight: 600;
+    flex-shrink: 0; /* Запрети сжимание */
 }
 
 .bar-container {
@@ -337,7 +340,9 @@ header h1 {
     padding-right: 10px;
     color: white;
     font-weight: 600;
-    font-size: 0.9rem;
+    font-size: 0.8rem;
+    min-width: 40px; /* Минимальная ширина для процентов */
+    white-space: nowrap; /* Запрети перенос текста */
 }
 
 /* Primary Emotion */
