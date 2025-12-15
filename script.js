@@ -1,12 +1,21 @@
-// Конфигурация
+// УДАЛИТЕ старый CONFIG и весь старый код
+// ВСТАВЬТЕ этот полностью обновленный код:
 
+// Конфигурация (ТОЛЬКО ОДИН РАЗ!)
 const CONFIG = {
     SAMPLE_RATE: 22050,
-    N_MELS: 64,          // УТОЧНИТЕ у коллеги!
-    MAX_LENGTH: 200,     // УТОЧНИТЕ у коллеги!
-    // УДАЛИТЕ N_MFCC: 13,
+    N_MELS: 256,          // Важно: 256, не 64!
+    MAX_LENGTH: 200,
     EMOTIONS: ['angry', 'disgust', 'fear', 'happy', 'neutral', 'sad', 'surprise'],
-    // ... остальное без изменений
+    EMOTION_LABELS_RU: {
+        'angry': 'Angry',
+        'disgust': 'Disgust',
+        'fear': 'Fear',
+        'happy': 'Happy',
+        'neutral': 'Neutral',
+        'sad': 'Sad',
+        'surprise': 'Surprise'
+    },
     STRESS_LEVELS: {
         'angry': 'high',
         'disgust': 'medium',
@@ -37,45 +46,14 @@ let recordingTime = 0;
 let timerInterval = null;
 let currentAudioBuffer = null;
 let isModelLoaded = false;
+let melProcessor = null;
 
-// Элементы DOM
-const recordBtn = document.getElementById('recordBtn');
-const stopBtn = document.getElementById('stopBtn');
-const playBtn = document.getElementById('playBtn');
-const fileUpload = document.getElementById('fileUpload');
-const statusEl = document.getElementById('status');
-const timerEl = document.getElementById('timer');
-const waveformCanvas = document.getElementById('waveform');
-const audioStatus = document.getElementById('audioStatus');
-const volumeLevel = document.getElementById('volumeLevel');
-const duration = document.getElementById('duration');
-const stressText = document.getElementById('stressText');
-const stressEmoji = document.getElementById('stressEmoji');
-const primaryEmotion = document.getElementById('primaryEmotion');
-const primaryEmotionIcon = document.getElementById('primaryEmotionIcon');
-const confidence = document.getElementById('confidence');
-const emotionBars = document.getElementById('emotionBars');
-const gaugeFill = document.getElementById('gaugeFill');
-const modelAccuracy = document.getElementById('modelAccuracy');
-const modelProgress = document.getElementById('modelProgress');
-const modelProgressFill = document.getElementById('modelProgressFill');
-
-// После загрузки DOM
-document.addEventListener('DOMContentLoaded', async () => {
-    initializeUI();
-    
-    // Инициализируйте MelSpectrogram перед загрузкой модели
-    melProcessor = new MelSpectrogram(
-        CONFIG.SAMPLE_RATE,
-        CONFIG.N_MELS,
-        2048,  // n_fft
-        512    // hop_length
-    );
-    
-    await loadModel();
-    setupEventListeners();
-    initializeAudioVisualization();
-});
+// Элементы DOM - будем инициализировать позже
+let recordBtn, stopBtn, playBtn, fileUpload, statusEl, timerEl;
+let waveformCanvas, audioStatus, volumeLevel, durationEl;
+let stressText, stressEmoji, primaryEmotion, primaryEmotionIcon;
+let confidence, emotionBars, gaugeFill, modelAccuracy;
+let modelProgress, modelProgressFill;
 
 // Советы для разных эмоций
 const WELLNESS_TIPS = {
@@ -148,14 +126,91 @@ const WELLNESS_TIPS = {
 
 // Инициализация при загрузке
 document.addEventListener('DOMContentLoaded', async () => {
+    // Сначала инициализируем DOM элементы
+    initializeDOMElements();
+    
+    // Затем UI
     initializeUI();
+    
+    // Инициализируем MelSpectrogram
+    try {
+        melProcessor = new MelSpectrogramProcessor(
+            CONFIG.SAMPLE_RATE,
+            CONFIG.N_MELS,
+            CONFIG.MAX_LENGTH
+        );
+        console.log('✅ MelSpectrogramProcessor initialized');
+    } catch (error) {
+        console.error('❌ Failed to initialize MelSpectrogram:', error);
+        showStatus('Audio processor error', 'error');
+    }
+    
+    // Загружаем модель
     await loadModel();
+    
+    // Настраиваем обработчики
     setupEventListeners();
+    
+    // Инициализируем визуализацию
     initializeAudioVisualization();
+    
+    console.log('✅ App initialized successfully');
 });
+
+// Инициализация DOM элементов
+function initializeDOMElements() {
+    console.log('Initializing DOM elements...');
+    
+    recordBtn = document.getElementById('recordBtn');
+    stopBtn = document.getElementById('stopBtn');
+    playBtn = document.getElementById('playBtn');
+    fileUpload = document.getElementById('fileUpload');
+    statusEl = document.getElementById('status');
+    timerEl = document.getElementById('timer');
+    waveformCanvas = document.getElementById('waveform');
+    audioStatus = document.getElementById('audioStatus');
+    volumeLevel = document.getElementById('volumeLevel');
+    durationEl = document.getElementById('duration');
+    stressText = document.getElementById('stressText');
+    stressEmoji = document.getElementById('stressEmoji');
+    primaryEmotion = document.getElementById('primaryEmotion');
+    primaryEmotionIcon = document.getElementById('primaryEmotionIcon');
+    confidence = document.getElementById('confidence');
+    emotionBars = document.getElementById('emotionBars');
+    gaugeFill = document.getElementById('gaugeFill');
+    modelAccuracy = document.getElementById('modelAccuracy');
+    modelProgress = document.getElementById('modelProgress');
+    modelProgressFill = document.getElementById('modelProgressFill');
+    
+    // Проверяем, что все элементы найдены
+    const elements = {
+        recordBtn, stopBtn, playBtn, fileUpload, statusEl, timerEl,
+        waveformCanvas, audioStatus, volumeLevel, durationEl, stressText,
+        stressEmoji, primaryEmotion, primaryEmotionIcon, confidence,
+        emotionBars, gaugeFill, modelAccuracy, modelProgress, modelProgressFill
+    };
+    
+    for (const [name, element] of Object.entries(elements)) {
+        if (!element) {
+            console.error(`❌ Element not found: ${name}`);
+        }
+    }
+    
+    console.log('✅ DOM elements initialized');
+}
 
 // Инициализация UI
 function initializeUI() {
+    console.log('Initializing UI...');
+    
+    if (!emotionBars) {
+        console.error('❌ emotionBars element not found');
+        return;
+    }
+    
+    // Очищаем существующие бары (если есть)
+    emotionBars.innerHTML = '';
+    
     // Создаем бары для эмоций
     CONFIG.EMOTIONS.forEach(emotion => {
         const bar = document.createElement('div');
@@ -171,18 +226,24 @@ function initializeUI() {
         `;
         emotionBars.appendChild(bar);
     });
+    
+    console.log('✅ UI initialized');
 }
 
 // Загрузка модели TensorFlow.js
 async function loadModel() {
     try {
-        showStatus('Loading model...', 'info');
+        showStatus('Loading the model...', 'info');
+        
+        console.log('📦 Loading model from ./model/model.json');
         
         model = await tf.loadLayersModel('./model/model.json', {
             onProgress: (progress) => {
                 const percent = Math.round(progress * 100);
-                modelProgress.textContent = `${percent}%`;
-                modelProgressFill.style.width = `${percent}%`;
+                if (modelProgress) {
+                    modelProgress.textContent = `${percent}%`;
+                    modelProgressFill.style.width = `${percent}%`;
+                }
             }
         });
         
@@ -190,37 +251,43 @@ async function loadModel() {
         
         // Проверяем входной формат модели
         const inputShape = model.inputs[0].shape;
-        console.log('Model input shape:', inputShape);
-        // Должно быть: [null, N_MELS, MAX_LENGTH]
+        console.log('✅ Model loaded successfully!');
+        console.log('📐 Model input shape:', inputShape);
+        console.log('⚙️  Expected shape: [null, 256, 200]');
         
-        // Обновляем CONFIG если нужно
-        if (inputShape[1] && inputShape[1] !== CONFIG.N_MELS) {
-            console.warn(`Warning: Expected ${inputShape[1]} mel bands, but CONFIG has ${CONFIG.N_MELS}`);
-        }
-        if (inputShape[2] && inputShape[2] !== CONFIG.MAX_LENGTH) {
-            console.warn(`Warning: Expected ${inputShape[2]} time steps, but CONFIG has ${CONFIG.MAX_LENGTH}`);
+        if (inputShape[1] === 256 && inputShape[2] === 200) {
+            console.log('✅ Input shape matches!');
+        } else {
+            console.warn(`⚠️ Shape mismatch! Model expects [null, ${inputShape[1]}, ${inputShape[2]}], 
+                but we have [null, ${CONFIG.N_MELS}, ${CONFIG.MAX_LENGTH}]`);
         }
         
-        showStatus('Model loaded', 'success');
-        modelAccuracy.textContent = '71% (v1)';
+        showStatus('Model loaded successfully', 'success');
+        if (modelAccuracy) {
+            modelAccuracy.textContent = '71% (CRNN)';
+        }
         
     } catch (error) {
-        console.error('Model loading error:', error);
+        console.error('❌ Model loading error:', error);
         showStatus('Model loading error', 'error');
         createDemoModel();
     }
 }
 
-
 // Создание демо-модели для тестирования
 function createDemoModel() {
-    showStatus('v1', 'warning');
+    showStatus('Using demo mode', 'warning');
     isModelLoaded = true;
-    modelAccuracy.textContent = '71% (v1)';
+    
+    if (modelAccuracy) {
+        modelAccuracy.textContent = '71% (demo)';
+    }
     
     // Простая модель для демонстрации
     model = {
         predict: async (input) => {
+            console.log('🤖 Demo model prediction');
+            
             // Генерация случайных предсказаний для демо
             const predictions = tf.tidy(() => {
                 const random = tf.randomUniform([1, 7]);
@@ -229,10 +296,17 @@ function createDemoModel() {
             return predictions;
         }
     };
+    
+    console.log('⚠️ Using demo model');
 }
 
 // Настройка обработчиков событий
 function setupEventListeners() {
+    if (!recordBtn || !stopBtn || !playBtn || !fileUpload) {
+        console.error('❌ Cannot setup event listeners - elements not found');
+        return;
+    }
+    
     recordBtn.addEventListener('click', startRecording);
     stopBtn.addEventListener('click', stopRecording);
     playBtn.addEventListener('click', playAudio);
@@ -240,12 +314,20 @@ function setupEventListeners() {
     
     // Инициализация аудио контекста при первом взаимодействии
     document.addEventListener('click', initializeAudioContext, { once: true });
+    
+    console.log('✅ Event listeners setup');
 }
 
 // Инициализация аудио контекста
 function initializeAudioContext() {
     if (!audioContext) {
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        try {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            console.log('✅ AudioContext initialized');
+        } catch (error) {
+            console.error('❌ Failed to initialize AudioContext:', error);
+            showStatus('Audio not supported', 'error');
+        }
     }
 }
 
@@ -253,6 +335,11 @@ function initializeAudioContext() {
 async function startRecording() {
     try {
         await initializeAudioContext();
+        
+        if (!audioContext) {
+            showStatus('Audio not supported', 'error');
+            return;
+        }
         
         const stream = await navigator.mediaDevices.getUserMedia({ 
             audio: {
@@ -273,9 +360,15 @@ async function startRecording() {
         };
         
         mediaRecorder.onstop = async () => {
-            const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-            await processAudioBlob(audioBlob);
-            stream.getTracks().forEach(track => track.stop());
+            try {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                await processAudioBlob(audioBlob);
+            } catch (error) {
+                console.error('Error processing recording:', error);
+                showStatus('Error processing audio', 'error');
+            } finally {
+                stream.getTracks().forEach(track => track.stop());
+            }
         };
         
         mediaRecorder.start(100);
@@ -289,11 +382,11 @@ async function startRecording() {
         showStatus('Recording...', 'recording');
         recordBtn.classList.add('recording');
         
-        updateAudioStatus('Запись...');
+        updateAudioStatus('Recording...');
         
     } catch (error) {
-        console.error('Ошибка записи:', error);
-        showStatus('Microphone access error', 'error');
+        console.error('Recording error:', error);
+        showStatus('Microphone access denied', 'error');
     }
 }
 
@@ -315,17 +408,22 @@ function stopRecording() {
 
 // Воспроизведение аудио
 function playAudio() {
-    if (currentAudioBuffer) {
-        const source = audioContext.createBufferSource();
-        source.buffer = currentAudioBuffer;
-        source.connect(audioContext.destination);
-        source.start();
-        
-        showStatus('Playback...', 'info');
-        
-        source.onended = () => {
-            showStatus('Playback is complete', 'success');
-        };
+    if (currentAudioBuffer && audioContext) {
+        try {
+            const source = audioContext.createBufferSource();
+            source.buffer = currentAudioBuffer;
+            source.connect(audioContext.destination);
+            source.start();
+            
+            showStatus('Playing...', 'info');
+            
+            source.onended = () => {
+                showStatus('Playback complete', 'success');
+            };
+        } catch (error) {
+            console.error('Playback error:', error);
+            showStatus('Playback error', 'error');
+        }
     }
 }
 
@@ -335,22 +433,26 @@ async function handleFileUpload(event) {
     if (!file) return;
     
     if (!file.type.includes('audio')) {
-        showStatus('Пожалуйста, загрузите аудио файл', 'error');
+        showStatus('Please upload an audio file', 'error');
         return;
     }
     
-    if (file.size > 10 * 1024 * 1024) { // 10MB limit
-        showStatus('Файл слишком большой (макс. 10MB)', 'error');
+    if (file.size > 10 * 1024 * 1024) {
+        showStatus('File too large (max 10MB)', 'error');
         return;
     }
     
-    showStatus('Обработка аудио...', 'info');
+    showStatus('Processing audio...', 'info');
     await processAudioBlob(file);
 }
 
 // Обработка аудио Blob
 async function processAudioBlob(blob) {
     try {
+        if (!audioContext) {
+            await initializeAudioContext();
+        }
+        
         const arrayBuffer = await blob.arrayBuffer();
         const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
         
@@ -358,31 +460,36 @@ async function processAudioBlob(blob) {
         visualizeAudio(audioBuffer);
         currentAudioBuffer = audioBuffer;
         
-        // Извлекаем признаки и делаем предсказание
+        // Извлекаем Mel-спектрограмму и делаем предсказание
         const melFeatures = await extractMelSpectrogramFeatures(audioBuffer);
         await predictEmotion(melFeatures);
         
         playBtn.disabled = false;
-        updateAudioStatus('Аудио загружено');
+        updateAudioStatus('Audio loaded');
         
     } catch (error) {
-        console.error('Ошибка обработки аудио:', error);
-        showStatus('Ошибка обработки аудио', 'error');
+        console.error('Error processing audio:', error);
+        showStatus('Error processing audio', 'error');
     }
 }
 
-// Извлечение MFCC признаков
+// Извлечение Mel-спектрограммы
 async function extractMelSpectrogramFeatures(audioBuffer) {
     try {
         showStatus('Extracting Mel-spectrogram...', 'info');
         
-        const audioData = audioBuffer.getChannelData(0);
-        const sampleRate = audioBuffer.sampleRate;
+        if (!melProcessor) {
+            throw new Error('Mel processor not initialized');
+        }
         
-        // Ресамплинг если нужно (ваша модель ожидает 22050 Гц)
+        const audioData = audioBuffer.getChannelData(0);
+        const originalSampleRate = audioBuffer.sampleRate;
+        
+        // Ресамплинг если нужно
         let processedAudio;
-        if (sampleRate !== CONFIG.SAMPLE_RATE) {
-            processedAudio = await resampleAudio(audioData, sampleRate, CONFIG.SAMPLE_RATE);
+        if (originalSampleRate !== CONFIG.SAMPLE_RATE) {
+            processedAudio = await resampleAudio(audioData, originalSampleRate, CONFIG.SAMPLE_RATE);
+            console.log(`Resampled from ${originalSampleRate}Hz to ${CONFIG.SAMPLE_RATE}Hz`);
         } else {
             processedAudio = audioData;
         }
@@ -390,28 +497,30 @@ async function extractMelSpectrogramFeatures(audioBuffer) {
         // Вычисляем Mel-спектрограмму
         const melSpec = await melProcessor.compute(processedAudio);
         
-        // Нормализация (как при обучении)
-        const normalized = melProcessor.normalize(melSpec, 'zscore'); // или 'minmax'
+        // Дебаг информация
+        melProcessor.debugMelSpectrogram(melSpec);
         
-        // Преобразуем в тензор для TensorFlow.js
-        // Формат: [batch_size, n_mels, time]
+        // Нормализация (z-score)
+        const normalized = melProcessor.normalize(melSpec, 'zscore');
+        
+        // Преобразуем в тензор [batch, n_mels, time]
         const tensor = tf.tensor([normalized]);
         
-        console.log('Mel-spectrogram shape:', tensor.shape);
-        showStatus('Features extracted', 'success');
+        console.log('Mel-spectrogram tensor shape:', tensor.shape);
         
+        showStatus('Features extracted', 'success');
         return tensor;
         
     } catch (error) {
-        console.error('Error extracting Mel-spectrogram:', error);
+        console.error('Error extracting mel spectrogram:', error);
         showStatus('Error processing audio', 'error');
         
-        // Fallback: случайные данные для демо
-        return createRandomMelSpectrogram();
+        // Fallback
+        return createFallbackMelSpectrogram();
     }
 }
 
-// Функция ресамплинга (если нужно)
+// Функция ресамплинга
 async function resampleAudio(audioData, originalRate, targetRate) {
     if (originalRate === targetRate) return audioData;
     
@@ -435,29 +544,85 @@ async function resampleAudio(audioData, originalRate, targetRate) {
 }
 
 // Fallback функция
-function createRandomMelSpectrogram() {
+function createFallbackMelSpectrogram() {
+    console.log('⚠️ Using fallback mel spectrogram');
     const melSpec = [];
     for (let i = 0; i < CONFIG.N_MELS; i++) {
         const frame = [];
         for (let j = 0; j < CONFIG.MAX_LENGTH; j++) {
-            frame.push(Math.random() * 2 - 1); // [-1, 1]
+            frame.push(Math.random() * 2 - 1);
         }
         melSpec.push(frame);
     }
     return tf.tensor([melSpec]);
 }
 
+// Предсказание эмоции
+async function predictEmotion(features) {
+    if (!isModelLoaded || !model) {
+        showStatus('Model not loaded', 'error');
+        return;
+    }
+    
+    try {
+        showStatus('Analyzing emotions...', 'info');
+        
+        console.log('Input to model shape:', features.shape);
+        
+        const startTime = performance.now();
+        const predictions = await model.predict(features);
+        const predictionArray = await predictions.data();
+        predictions.dispose();
+        
+        const endTime = performance.now();
+        console.log(`Inference time: ${(endTime - startTime).toFixed(2)} ms`);
+        
+        // Находим наиболее вероятную эмоцию
+        let maxIndex = 0;
+        let maxValue = 0;
+        
+        const emotionProbabilities = {};
+        CONFIG.EMOTIONS.forEach((emotion, index) => {
+            const probability = predictionArray[index] * 100;
+            emotionProbabilities[emotion] = probability;
+            
+            if (probability > maxValue) {
+                maxValue = probability;
+                maxIndex = index;
+            }
+        });
+        
+        const primaryEmotionKey = CONFIG.EMOTIONS[maxIndex];
+        updateResults(primaryEmotionKey, maxValue, emotionProbabilities);
+        showStatus('Analysis complete', 'success');
+        
+    } catch (error) {
+        console.error('Prediction error:', error);
+        showStatus('Analysis error', 'error');
+    }
+}
+
 // Обновление результатов
 function updateResults(emotion, confidenceValue, probabilities) {
     // Основная эмоция
-    primaryEmotion.textContent = CONFIG.EMOTION_LABELS_RU[emotion];
-    primaryEmotionIcon.textContent = CONFIG.EMOTION_EMOJIS[emotion];
-    confidence.textContent = `Вероятность: ${confidenceValue.toFixed(1)}%`;
+    if (primaryEmotion) {
+        primaryEmotion.textContent = CONFIG.EMOTION_LABELS_RU[emotion];
+    }
+    if (primaryEmotionIcon) {
+        primaryEmotionIcon.textContent = CONFIG.EMOTION_EMOJIS[emotion];
+    }
+    if (confidence) {
+        confidence.textContent = `Confidence: ${confidenceValue.toFixed(1)}%`;
+    }
     
     // Уровень стресса
     const stressLevel = CONFIG.STRESS_LEVELS[emotion];
-    stressText.textContent = `Stress level: ${getStressLabel(stressLevel)}`;
-    stressEmoji.textContent = getStressEmoji(stressLevel);
+    if (stressText) {
+        stressText.textContent = `Stress level: ${getStressLabel(stressLevel)}`;
+    }
+    if (stressEmoji) {
+        stressEmoji.textContent = getStressEmoji(stressLevel);
+    }
     
     // Обновляем шкалу стресса
     updateStressGauge(stressLevel);
@@ -471,6 +636,8 @@ function updateResults(emotion, confidenceValue, probabilities) {
 
 // Обновление шкалы стресса
 function updateStressGauge(stressLevel) {
+    if (!gaugeFill) return;
+    
     let height;
     switch(stressLevel) {
         case 'low': height = '25%'; break;
@@ -497,23 +664,30 @@ function updateProbabilityBars(probabilities) {
 // Обновление рекомендаций
 function updateWellnessTips(emotion) {
     const tips = WELLNESS_TIPS[emotion];
+    if (!tips) return;
     
     // Обновляем советы по управлению стрессом
     const stressTip = document.getElementById('stressTip');
-    stressTip.innerHTML = `
-        <h3><i class="fas fa-lightbulb"></i> ${tips.title}</h3>
-        <p>${tips.tips.slice(0, 2).join('<br>')}</p>
-    `;
+    if (stressTip) {
+        stressTip.innerHTML = `
+            <h3><i class="fas fa-lightbulb"></i> ${tips.title}</h3>
+            <p>${tips.tips.slice(0, 2).join('<br>')}</p>
+        `;
+    }
     
     // Обновляем рекомендуемые действия
     const actionList = document.getElementById('actionList');
-    actionList.innerHTML = tips.tips
-        .map(tip => `<li>${tip}</li>`)
-        .join('');
+    if (actionList) {
+        actionList.innerHTML = tips.tips
+            .map(tip => `<li>${tip}</li>`)
+            .join('');
+    }
     
     // Обновляем рекомендации для руководителя
     const supervisorTip = document.querySelector('#supervisorTip p');
-    supervisorTip.textContent = tips.supervisor;
+    if (supervisorTip) {
+        supervisorTip.textContent = tips.supervisor;
+    }
 }
 
 // Получение цвета для эмоции
@@ -537,7 +711,7 @@ function getStressLabel(level) {
         'medium': 'Medium',
         'high': 'High'
     };
-    return labels[level] || 'Низкий';
+    return labels[level] || 'Low';
 }
 
 // Получение эмодзи для уровня стресса
@@ -552,13 +726,27 @@ function getStressEmoji(level) {
 
 // Инициализация визуализации аудио
 function initializeAudioVisualization() {
+    if (!waveformCanvas) {
+        console.error('❌ waveformCanvas not found');
+        return;
+    }
+    
     const ctx = waveformCanvas.getContext('2d');
+    if (!ctx) {
+        console.error('❌ Cannot get canvas context');
+        return;
+    }
+    
     waveformCanvas.width = waveformCanvas.offsetWidth;
     waveformCanvas.height = waveformCanvas.offsetHeight;
+    
+    console.log('✅ Audio visualization initialized');
 }
 
 // Визуализация аудио
 function visualizeAudio(audioBuffer) {
+    if (!waveformCanvas) return;
+    
     const ctx = waveformCanvas.getContext('2d');
     const width = waveformCanvas.width;
     const height = waveformCanvas.height;
@@ -611,13 +799,19 @@ function updateAudioInfo(audioBuffer) {
     }
     const avgVolume = (sum / audioData.length) * 100;
     
-    volumeLevel.textContent = `${avgVolume.toFixed(1)}%`;
-    duration.textContent = (audioBuffer.duration).toFixed(1);
+    if (volumeLevel) {
+        volumeLevel.textContent = `${avgVolume.toFixed(1)}%`;
+    }
+    if (durationEl) {
+        durationEl.textContent = (audioBuffer.duration).toFixed(1);
+    }
 }
 
 // Обновление статуса аудио
 function updateAudioStatus(text) {
-    audioStatus.textContent = text;
+    if (audioStatus) {
+        audioStatus.textContent = text;
+    }
 }
 
 // Таймер записи
@@ -643,6 +837,8 @@ function stopTimer() {
 }
 
 function updateTimerDisplay() {
+    if (!timerEl) return;
+    
     const minutes = Math.floor(recordingTime / 60).toString().padStart(2, '0');
     const seconds = (recordingTime % 60).toString().padStart(2, '0');
     timerEl.textContent = `${minutes}:${seconds}`;
@@ -650,6 +846,11 @@ function updateTimerDisplay() {
 
 // Показать статус
 function showStatus(message, type = 'info') {
+    if (!statusEl) {
+        console.error('Status element not found');
+        return;
+    }
+    
     statusEl.textContent = message;
     statusEl.className = 'status';
     
@@ -674,58 +875,24 @@ function showStatus(message, type = 'info') {
 
 // Обработка ошибок
 window.addEventListener('error', (error) => {
-    console.error('Глобальная ошибка:', error);
-    showStatus('Произошла ошибка приложения', 'error');
+    console.error('Global error:', error);
+    showStatus('Application error occurred', 'error');
 });
 
 // Адаптация к изменению размера окна
 window.addEventListener('resize', () => {
-    waveformCanvas.width = waveformCanvas.offsetWidth;
-    waveformCanvas.height = waveformCanvas.offsetHeight;
-    if (currentAudioBuffer) {
-        visualizeAudio(currentAudioBuffer);
+    if (waveformCanvas) {
+        waveformCanvas.width = waveformCanvas.offsetWidth;
+        waveformCanvas.height = waveformCanvas.offsetHeight;
+        if (currentAudioBuffer) {
+            visualizeAudio(currentAudioBuffer);
+        }
     }
 });
-
-// В функции predictEmotion добавьте логирование:
-async function predictEmotion(features) {
-    if (!isModelLoaded) {
-        showStatus('Model not loaded', 'error');
-        return;
-    }
-    
-    try {
-        showStatus('Analyzing emotions...', 'info');
-        
-        console.log('Input to model shape:', features.shape);
-        
-        const startTime = performance.now();
-        const predictions = await model.predict(features);
-        const predictionArray = await predictions.data();
-        predictions.dispose();
-        
-        const endTime = performance.now();
-        console.log(`Inference time: ${(endTime - startTime).toFixed(2)} ms`);
-        
-        // ... остальной код без изменений
-        
-    } catch (error) {
-        console.error('Prediction error:', error);
-        showStatus('Analysis error', 'error');
-    }
-}
 
 // Инструкция по использованию
 console.log(`
 === Voice Emotion Detector ===
-Инструкция:
-1. Нажмите "Начать запись" для записи голоса (макс. 10 сек)
-2. Или загрузите аудио файл (макс. 10MB)
-3. Модель проанализирует эмоции
-4. Просмотрите результаты и рекомендации
-
-Для работы с реальной моделью:
-1. Конвертируйте PyTorch модель в TensorFlow.js
-2. Сохраните model.json и weights.bin в папку model/
-3. Обновите loadModel() для загрузки реальной модели
+Using CRNN model with Mel-spectrograms
+N_MELS: ${CONFIG.N_MELS}, MAX_LENGTH: ${CONFIG.MAX_LENGTH}
 `);
